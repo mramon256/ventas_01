@@ -1,10 +1,19 @@
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
+import { IngresosPorFechaChart, VentasChart } from "@/components/ventas-chart"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import {
   Table,
   TableBody,
   TableCaption,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -16,6 +25,12 @@ type Venta = {
   producto_id: string
   unidades: string
   precio_unitario: string
+}
+
+type Producto = {
+  producto_id: string
+  nombre: string
+  categoria: string
 }
 
 function parseCsvLine(line: string): string[] {
@@ -45,8 +60,13 @@ function parseCsvLine(line: string): string[] {
   return fields
 }
 
+async function leerTextoUtf8(path: string): Promise<string> {
+  const bytes = await readFile(path)
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+}
+
 async function obtenerVentas(): Promise<Venta[]> {
-  const csv = await readFile(join(process.cwd(), "public", "data", "ventas.csv"), "utf8")
+  const csv = await leerTextoUtf8(join(process.cwd(), "public", "data", "ventas.csv"))
   const [headerLine, ...dataLines] = csv.trim().split(/\r?\n/)
   const headers = parseCsvLine(headerLine)
 
@@ -56,8 +76,56 @@ async function obtenerVentas(): Promise<Venta[]> {
   })
 }
 
+async function obtenerProductos(): Promise<Producto[]> {
+  const json = await leerTextoUtf8(join(process.cwd(), "public", "data", "productos.json"))
+  return JSON.parse(json) as Producto[]
+}
+
 export default async function Page() {
-  const ventas = await obtenerVentas()
+  const [ventas, productos] = await Promise.all([obtenerVentas(), obtenerProductos()])
+  const totalVentas = ventas.reduce(
+    (suma, venta) => suma + Number(venta.unidades) * Number(venta.precio_unitario),
+    0
+  )
+  const totalUnidades = ventas.reduce(
+    (suma, venta) => suma + Number(venta.unidades),
+    0
+  )
+  const ventaMedia = ventas.length > 0 ? totalVentas / ventas.length : 0
+  const unidadesPorProducto = ventas.reduce((acumulado, venta) => {
+    acumulado.set(
+      venta.producto_id,
+      (acumulado.get(venta.producto_id) ?? 0) + Number(venta.unidades)
+    )
+    return acumulado
+  }, new Map<string, number>())
+  const productoMasVendido = productos.reduce<Producto | undefined>(
+    (mejor, producto) =>
+      !mejor ||
+      (unidadesPorProducto.get(producto.producto_id) ?? 0) >
+        (unidadesPorProducto.get(mejor.producto_id) ?? 0)
+        ? producto
+        : mejor,
+    undefined
+  )
+  const unidadesDelMasVendido = productoMasVendido
+    ? (unidadesPorProducto.get(productoMasVendido.producto_id) ?? 0)
+    : 0
+  const datosGrafico = productos
+    .map((producto) => ({
+      producto: producto.nombre,
+      desktop: unidadesPorProducto.get(producto.producto_id) ?? 0,
+    }))
+    .sort((a, b) => a.desktop - b.desktop || a.producto.localeCompare(b.producto))
+  const ingresosPorFecha = ventas.reduce((acumulado, venta) => {
+    const importe = Number(venta.unidades) * Number(venta.precio_unitario)
+    acumulado.set(venta.fecha, (acumulado.get(venta.fecha) ?? 0) + importe)
+    return acumulado
+  }, new Map<string, number>())
+  const datosIngresosPorFecha = Array.from(ingresosPorFecha, ([fecha, ingresos]) => ({
+    fecha,
+    ingresos,
+  })).sort((a, b) => a.fecha.localeCompare(b.fecha))
 
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-6xl flex-col gap-6 p-6 md:p-10">
@@ -68,6 +136,82 @@ export default async function Page() {
           Registros cargados desde el archivo public/data/ventas.csv.
         </p>
       </header>
+
+      <div className="columns-1 gap-4 md:columns-2 xl:grid xl:grid-cols-12">
+        <Card className="mb-4 inline-block w-full break-inside-avoid xl:col-span-4 xl:mb-0">
+          <CardHeader>
+            <CardDescription>Ingresos totales</CardDescription>
+            <CardTitle className="text-3xl">
+              {totalVentas.toLocaleString("es-ES", {
+                minimumFractionDigits: 2,
+                useGrouping: true,
+                maximumFractionDigits: 2,
+              })}{" \u20ac"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Suma de unidades por precio unitario en cada venta.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-4 inline-block w-full break-inside-avoid xl:col-span-4 xl:col-start-5 xl:mb-0">
+          <CardHeader>
+            <CardDescription>Venta media</CardDescription>
+            <CardTitle className="text-3xl">
+              {ventaMedia.toLocaleString("es-ES", {
+                minimumFractionDigits: 2,
+                useGrouping: true,
+                maximumFractionDigits: 2,
+              })}{" \u20ac"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Ingresos totales divididos entre operaciones.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-4 inline-block w-full break-inside-avoid xl:col-span-4 xl:col-start-9 xl:mb-0">
+          <CardHeader>
+            <CardDescription>{"Producto m\u00e1s vendido"}</CardDescription>
+            <CardTitle className="text-lg break-words">
+              {productoMasVendido?.nombre ?? "Sin datos"}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              ID: {productoMasVendido?.producto_id ?? "Sin ID"}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              {unidadesDelMasVendido.toLocaleString("es-ES", { useGrouping: true })} unidades
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <section className="grid grid-cols-12 gap-4">
+        <Card className="col-span-12 lg:col-span-6 xl:col-span-4 xl:col-start-3">
+          <CardHeader>
+            <CardTitle>Unidades por producto</CardTitle>
+            <CardDescription>Productos ordenados por unidades vendidas, de menor a mayor.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VentasChart data={datosGrafico} />
+          </CardContent>
+        </Card>
+        <Card className="col-span-12 lg:col-span-6 xl:col-span-4 xl:col-start-7">
+          <CardHeader>
+            <CardTitle>Importe vendido por fecha</CardTitle>
+            <CardDescription>Ingresos diarios calculados como unidades por precio unitario.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <IngresosPorFechaChart data={datosIngresosPorFecha} />
+          </CardContent>
+        </Card>
+      </section>
 
       <section className="rounded-xl border bg-card p-2 shadow-sm sm:p-4">
         <div className="max-h-[70vh] overflow-auto">
@@ -93,18 +237,41 @@ export default async function Page() {
                   <TableCell className="text-right">
                     {Number(venta.precio_unitario).toLocaleString("es-ES", {
                       minimumFractionDigits: 2,
+                      useGrouping: true,
                       maximumFractionDigits: 2,
                     })}
                   </TableCell>
                   <TableCell className="text-right font-medium">
                     {(Number(venta.unidades) * Number(venta.precio_unitario)).toLocaleString(
                       "es-ES",
-                      { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                      {
+                        minimumFractionDigits: 2,
+                        useGrouping: true,
+                        maximumFractionDigits: 2,
+                      }
                     )}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={3} className="text-right font-semibold">
+                  Total de ventas
+                </TableCell>
+                <TableCell className="text-right font-bold">
+                  {totalUnidades.toLocaleString("es-ES", { useGrouping: true })}
+                </TableCell>
+                <TableCell className="text-right font-semibold">Importe total</TableCell>
+                <TableCell className="text-right font-bold">
+                  {totalVentas.toLocaleString("es-ES", {
+                    minimumFractionDigits: 2,
+                    useGrouping: true,
+                    maximumFractionDigits: 2,
+                  })}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
           </Table>
         </div>
       </section>
