@@ -9,27 +9,27 @@
     {
       "venta_id": "V003",
       "fila_csv": 62,
-      "motivo": "Copia exacta de la operacion original en la fila 4."
+      "motivo": "Copia exacta de la fila 4."
     },
     {
       "venta_id": "V011",
       "fila_csv": 63,
-      "motivo": "Copia exacta de la operacion original en la fila 12."
+      "motivo": "Copia exacta de la fila 12."
     },
     {
       "venta_id": "V021",
       "fila_csv": 64,
-      "motivo": "Copia exacta de la operacion original en la fila 22."
+      "motivo": "Copia exacta de la fila 22."
     },
     {
       "venta_id": "V036",
       "fila_csv": 65,
-      "motivo": "Copia exacta de la operacion original en la fila 37."
+      "motivo": "Copia exacta de la fila 37."
     },
     {
       "venta_id": "V049",
       "fila_csv": 66,
-      "motivo": "Copia exacta de la operacion original en la fila 50."
+      "motivo": "Copia exacta de la fila 50."
     }
   ],
   "incidencias": [
@@ -56,7 +56,7 @@
     {
       "venta_id": "V065",
       "fila_csv": 71,
-      "motivo": "El precio_unitario no es un numero valido."
+      "motivo": "El precio_unitario debe ser un numero finito mayor o igual que cero."
     }
   ]
 }
