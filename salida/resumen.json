@@ -1,0 +1,14 @@
+{
+  "periodo": { "desde": "2026-10-01", "hasta": "2026-10-07" },
+  "moneda": "EUR",
+  "generado_en": "fecha y hora ISO de ejecución",
+  "operaciones_validas": 60,
+  "unidades_totales": 150,
+  "ingresos_totales": 2343.00,
+  "ingresos_por_categoria": [
+    { "categoria": "Papelería", "ingresos": 875.00 },
+    { "categoria": "Hogar", "ingresos": 1088.00 },
+    { "categoria": "Tecnología", "ingresos": 72.00 },
+    { "categoria": "Deporte", "ingresos": 308.00 }
+  ]
+}
