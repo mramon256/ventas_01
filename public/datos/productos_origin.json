@@ -1,0 +1,42 @@
+[
+  {
+    "producto_id": "P01",
+    "nombre": "Cuaderno",
+    "categoria": "Papelería"
+  },
+  {
+    "producto_id": "P02",
+    "nombre": "Bolígrafo",
+    "categoria": "Papelería"
+  },
+  {
+    "producto_id": "P03",
+    "nombre": "Taza",
+    "categoria": "Hogar"
+  },
+  {
+    "producto_id": "P04",
+    "nombre": "Lámpara",
+    "categoria": "Hogar"
+  },
+  {
+    "producto_id": "P05",
+    "nombre": "Cable USB",
+    "categoria": "Tecnología"
+  },
+  {
+    "producto_id": "P06",
+    "nombre": "Ratón",
+    "categoria": "Tecnología"
+  },
+  {
+    "producto_id": "P07",
+    "nombre": "Botella",
+    "categoria": "Deporte"
+  },
+  {
+    "producto_id": "P08",
+    "nombre": "Esterilla",
+    "categoria": "Deporte"
+  }
+]
