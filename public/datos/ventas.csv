@@ -1,4 +1,4 @@
-﻿"venta_id","fecha","producto_id","unidades","precio_unitario"
+"venta_id","fecha","producto_id","unidades","precio_unitario"
 "V001","2026-10-01","P01","1","5"
 "V002","2026-10-02","P02","2","2"
 "V003","2026-10-03","P03","3","12"

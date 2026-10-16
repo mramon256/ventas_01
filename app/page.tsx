@@ -73,7 +73,7 @@ async function leerTextoUtf8(path: string): Promise<string> {
 }
 
 async function obtenerVentas(): Promise<Venta[]> {
-  const csv = await leerTextoUtf8(join(process.cwd(), "public", "data", "ventas.csv"))
+  const csv = await leerTextoUtf8(join(process.cwd(), "public", "datos", "ventas.csv"))
   const [headerLine, ...dataLines] = csv.trim().split(/\r?\n/)
   const headers = parseCsvLine(headerLine)
 
@@ -84,7 +84,7 @@ async function obtenerVentas(): Promise<Venta[]> {
 }
 
 async function obtenerProductos(): Promise<Producto[]> {
-  const json = await leerTextoUtf8(join(process.cwd(), "public", "data", "productos.json"))
+  const json = await leerTextoUtf8(join(process.cwd(), "public", "datos", "productos.json"))
   return JSON.parse(json) as Producto[]
 }
 
@@ -168,7 +168,7 @@ export default async function Page() {
         <p className="text-sm font-medium text-muted-foreground">Actividad de ventas</p>
         <h1 className="text-3xl font-semibold tracking-tight">Ventas</h1>
         <p className="text-muted-foreground">
-          Registros cargados desde el archivo public/data/ventas.csv.
+          Registros cargados desde el archivo public/datos/ventas.csv.
         </p>
       </header>
 
