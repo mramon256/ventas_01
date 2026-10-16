@@ -33,6 +33,13 @@ type Producto = {
   categoria: string
 }
 
+type Calidad = {
+  recuentos: {
+    copias_duplicadas_excluidas: number
+    incidencias_excluidas: number
+  }
+}
+
 function parseCsvLine(line: string): string[] {
   const fields: string[] = []
   let field = ""
@@ -81,8 +88,36 @@ async function obtenerProductos(): Promise<Producto[]> {
   return JSON.parse(json) as Producto[]
 }
 
+async function obtenerCalidad(): Promise<Calidad> {
+  const json = await leerTextoUtf8(join(process.cwd(), "salida", "calidad.json"))
+  return JSON.parse(json) as Calidad
+}
+
 export default async function Page() {
-  const [ventas, productos] = await Promise.all([obtenerVentas(), obtenerProductos()])
+  const [ventas, productos, calidad] = await Promise.all([
+    obtenerVentas(),
+    obtenerProductos(),
+    obtenerCalidad(),
+  ])
+  const productosPorId = new Map(
+    productos.map((producto) => [producto.producto_id, producto] as const)
+  )
+  const ingresosPorCategoria = new Map<string, number>()
+  for (const producto of productos) {
+    if (!ingresosPorCategoria.has(producto.categoria)) {
+      ingresosPorCategoria.set(producto.categoria, 0)
+    }
+  }
+  for (const venta of ventas) {
+    const categoria = productosPorId.get(venta.producto_id)?.categoria
+    if (!categoria) continue
+    const ingreso = Number(venta.unidades) * Number(venta.precio_unitario)
+    ingresosPorCategoria.set(categoria, (ingresosPorCategoria.get(categoria) ?? 0) + ingreso)
+  }
+  const resumenIngresosPorCategoria = Array.from(
+    ingresosPorCategoria,
+    ([categoria, ingresos]) => ({ categoria, ingresos })
+  ).sort((a, b) => a.categoria.localeCompare(b.categoria, "es"))
   const totalVentas = ventas.reduce(
     (suma, venta) => suma + Number(venta.unidades) * Number(venta.precio_unitario),
     0
@@ -174,6 +209,26 @@ export default async function Page() {
           </CardContent>
         </Card>
 
+        <Card className="mb-4 inline-block w-full break-inside-avoid xl:col-span-4 xl:col-start-1 xl:mb-0">
+          <CardHeader>
+            <CardDescription>Registros excluidos</CardDescription>
+            <CardTitle>Calidad de los datos</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Duplicados</p>
+              <p className="text-2xl font-semibold">
+                {calidad.recuentos.copias_duplicadas_excluidas.toLocaleString("es-ES")}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Incidencias</p>
+              <p className="text-2xl font-semibold">
+                {calidad.recuentos.incidencias_excluidas.toLocaleString("es-ES")}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
         <Card className="mb-4 inline-block w-full break-inside-avoid xl:col-span-4 xl:col-start-9 xl:mb-0">
           <CardHeader>
             <CardDescription>{"Producto m\u00e1s vendido"}</CardDescription>
@@ -214,6 +269,43 @@ export default async function Page() {
       </section>
 
       <section className="rounded-xl border bg-card p-2 shadow-sm sm:p-4">
+        <Table>
+          <TableCaption>{"Ingresos acumulados por categor\u00eda del producto."}</TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{"Categor\u00eda"}</TableHead>
+              <TableHead className="text-right">{"Ingresos acumulados (\u20ac)"}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {resumenIngresosPorCategoria.map(({ categoria, ingresos }) => (
+              <TableRow key={categoria}>
+                <TableCell className="font-medium">{categoria}</TableCell>
+                <TableCell className="text-right">
+                  {ingresos.toLocaleString("es-ES", {
+                    minimumFractionDigits: 2,
+                    useGrouping: true,
+                    maximumFractionDigits: 2,
+                  })}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+          <TableFooter>
+            <TableRow>
+              <TableCell className="text-right font-semibold">Total general</TableCell>
+              <TableCell className="text-right font-bold">
+                {totalVentas.toLocaleString("es-ES", {
+                  minimumFractionDigits: 2,
+                  useGrouping: true,
+                  maximumFractionDigits: 2,
+                })}
+              </TableCell>
+            </TableRow>
+          </TableFooter>
+        </Table>
+      </section>
+      <section className="rounded-xl border bg-card p-2 shadow-sm sm:p-4">
         <div className="max-h-[70vh] overflow-auto">
           <Table>
             <TableCaption>{`${ventas.length} operaciones cargadas desde el CSV.`}</TableCaption>
@@ -222,6 +314,7 @@ export default async function Page() {
                 <TableHead>Venta ID</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Producto ID</TableHead>
+                <TableHead>{"Categor\u00eda"}</TableHead>
                 <TableHead className="text-right">Unidades</TableHead>
                 <TableHead className="text-right">{"Precio unitario (\u20ac)"}</TableHead>
                 <TableHead className="text-right">{"Total (\u20ac)"}</TableHead>
@@ -233,6 +326,7 @@ export default async function Page() {
                   <TableCell className="font-medium">{venta.venta_id}</TableCell>
                   <TableCell>{venta.fecha}</TableCell>
                   <TableCell>{venta.producto_id}</TableCell>
+                  <TableCell>{productosPorId.get(venta.producto_id)?.categoria ?? "-"}</TableCell>
                   <TableCell className="text-right">{venta.unidades}</TableCell>
                   <TableCell className="text-right">
                     {Number(venta.precio_unitario).toLocaleString("es-ES", {
@@ -256,7 +350,7 @@ export default async function Page() {
             </TableBody>
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={3} className="text-right font-semibold">
+                <TableCell colSpan={4} className="text-right font-semibold">
                   Total de ventas
                 </TableCell>
                 <TableCell className="text-right font-bold">
