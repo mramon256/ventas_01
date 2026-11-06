@@ -17,6 +17,9 @@
 
 # production
 /build
+/.tsupgrader/
+/public/maplibre-gl-worker.mjs
+/public/third-party-licenses/maplibre-gl.txt
 
 # misc
 .DS_Store

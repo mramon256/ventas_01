@@ -27,6 +27,8 @@ Supabase
 
 Aplicación didáctica para extraer observaciones horarias del [Archivo Histórico de Open-Meteo](https://open-meteo.com/en/docs/historical-weather-api), normalizarlas y validarlas antes de seleccionar filas para Supabase.
 
+La página de inicio muestra el dashboard de estaciones con mapa interactivo, navegación entre etapas y el panel ETL existente. El mapa usa teselas de OpenFreeMap/OpenStreetMap y necesita conexión a Internet; el worker de MapLibre y su licencia se copian automáticamente a `public/` al ejecutar `npm run dev` o `npm run build`.
+
 ### Instalación y ejecución
 
 1. Instala dependencias con `npm install`.
@@ -35,6 +37,8 @@ Aplicación didáctica para extraer observaciones horarias del [Archivo Históri
 4. Arranca el entorno con `npm run dev` y abre `http://localhost:3000`.
 
 La publishable key no se usa en esta aplicación: lectura y escritura pasan por rutas de servidor y requieren la clave secreta. No hay autenticación en el proyecto; estas rutas están pensadas solo para desarrollo local. Añade autenticación y autorización antes de publicar. RLS queda activado, sin políticas públicas de escritura.
+
+El botón «Activar agente» abre un diálogo y envía la pregunta a una API compatible con OpenAI. Configura `AGENT_API_URL` (URL completa del endpoint Chat Completions), `AGENT_API_KEY` y `AGENT_MODEL` en `.env.local`; en Vercel no habilites el endpoint hasta añadir autenticación y autorización de usuario. La clave permanece en el servidor y nunca se envía al navegador.
 
 ### Etapas y reglas
 
