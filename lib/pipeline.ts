@@ -86,8 +86,8 @@ export function cleanRows(candidates: NormalizedCandidate[]) {
     if (typeof candidate.humedad_pct === "number" && Number.isFinite(candidate.humedad_pct) && (candidate.humedad_pct < 0 || candidate.humedad_pct > 100)) reasons.push("La humedad debe estar entre 0 y 100 %.")
     if (typeof candidate.precipitacion_mm === "number" && Number.isFinite(candidate.precipitacion_mm) && candidate.precipitacion_mm < 0) reasons.push("La precipitación no puede ser negativa.")
     const key = `${candidate.ciudad}|${candidate.fecha_hora}`
-    if (candidate.fecha_hora && seen.has(key)) reasons.push("Duplicado por ciudad y fecha_hora; se conserva la primera fila recibida.")
-    if (candidate.fecha_hora) seen.add(key)
+    if (!reasons.length && seen.has(key)) reasons.push("Duplicado por ciudad y fecha_hora; se conserva la primera fila válida recibida.")
+    if (!reasons.length) seen.add(key)
     if (reasons.length) {
       rejected.push({ ciudad: candidate.ciudad, fecha_hora: candidate.fecha_hora, temperatura_2m: candidate.temperatura_c, relative_humidity_2m: candidate.humedad_pct, precipitation: candidate.precipitacion_mm, motivo: reasons.join(" ") })
     } else {
@@ -112,6 +112,14 @@ export type Filters = {
   direction: "asc" | "desc"
 }
 
+export type SelectionMode = "automatic" | "manual"
+
+export function resolveSelection(rows: WeatherRecord[], manualSelection: ReadonlySet<string>, mode: SelectionMode) {
+  return mode === "automatic"
+    ? new Set(rows.map((row) => `${row.ciudad}|${row.fecha_hora}`))
+    : new Set(manualSelection)
+}
+
 export function applyFilters(rows: WeatherRecord[], filters: Filters) {
   return rows.filter((row) =>
     (!filters.cities.length || filters.cities.includes(row.ciudad)) &&
@@ -133,12 +141,23 @@ export function applyFilters(rows: WeatherRecord[], filters: Filters) {
 }
 
 export function validateRecords(records: unknown): records is WeatherRecord[] {
-  return Array.isArray(records) && records.every((row) =>
-    row && typeof row === "object" &&
-    CITIES.some((city) => city.name === (row as WeatherRecord).ciudad) &&
-    typeof (row as WeatherRecord).fecha_hora === "string" && !Number.isNaN(Date.parse((row as WeatherRecord).fecha_hora)) &&
-    ["temperatura_c", "humedad_pct", "precipitacion_mm"].every((field) => typeof (row as unknown as Record<string, unknown>)[field] === "number" && Number.isFinite((row as unknown as Record<string, number>)[field])) &&
-    (row as WeatherRecord).humedad_pct >= 0 && (row as WeatherRecord).humedad_pct <= 100 &&
-    (row as WeatherRecord).precipitacion_mm >= 0,
-  )
+  const timestampPattern = /^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?Z$/
+  const fields = ["ciudad", "fecha_hora", "temperatura_c", "humedad_pct", "precipitacion_mm"]
+
+  return Array.isArray(records) && records.every((row): row is WeatherRecord => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return false
+    const record = row as Record<string, unknown>
+    if (Object.keys(record).length !== fields.length || fields.some((field) => !(field in record))) return false
+
+    return CITIES.some((city) => city.name === record.ciudad) &&
+      typeof record.fecha_hora === "string" &&
+      timestampPattern.test(record.fecha_hora) &&
+      !Number.isNaN(Date.parse(record.fecha_hora)) &&
+      ["temperatura_c", "humedad_pct", "precipitacion_mm"].every(
+        (field) => typeof record[field] === "number" && Number.isFinite(record[field]),
+      ) &&
+      (record.humedad_pct as number) >= 0 &&
+      (record.humedad_pct as number) <= 100 &&
+      (record.precipitacion_mm as number) >= 0
+  })
 }

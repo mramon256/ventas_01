@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { applyFilters, cleanRows, transformCity } from "../lib/pipeline.ts"
+import { applyFilters, cleanRows, resolveSelection, transformCity, validateRecords } from "../lib/pipeline.ts"
 
 const emptyFilters = {
   cities: [], from: "", to: "", minTemp: "", maxTemp: "", minHumidity: "", maxHumidity: "", minRain: "", maxRain: "", rainOnly: false, sortBy: "fecha_hora", direction: "asc",
@@ -32,6 +32,25 @@ test("detecta duplicados por ciudad y hora y conserva la primera fila", () => {
   assert.match(cleaned.rejected[0].motivo, /Duplicado/)
 })
 
+test("una fila inválida no impide conservar después una fila válida con la misma clave", () => {
+  const invalid = { ...row(0), humedad_pct: 101 }
+  const valid = row(0, 18)
+  const cleaned = cleanRows([invalid, valid])
+
+  assert.equal(cleaned.rows.length, 1)
+  assert.equal(cleaned.rows[0].temperatura_c, 18)
+  assert.match(cleaned.rejected[0].motivo, /humedad/)
+})
+
+test("valida registros de carga y rechaza campos extra o fechas fuera de UTC", () => {
+  const valid = row(0)
+
+  assert.equal(validateRecords([valid]), true)
+  assert.equal(validateRecords([{ ...valid, extra: true }]), false)
+  assert.equal(validateRecords([{ ...valid, fecha_hora: "2026-09-01T00:00:00" }]), false)
+  assert.equal(validateRecords([{ ...valid, fecha_hora: "2026-09-01T00:00:00+00:00" }]), false)
+})
+
 test("filtra, ordena y después pagina el conjunto reducido", () => {
   const rows = Array.from({ length: 48 }, (_, index) => row(index % 24, index))
   const filtered = applyFilters(rows, { ...emptyFilters, minTemp: "20", sortBy: "temperatura_c", direction: "desc" })
@@ -48,6 +67,17 @@ test("selecciona filas de varias páginas y no incorpora filas nuevas al cambiar
   assert.equal(changed.filter((item) => selectedKeys.has(`${item.ciudad}|${item.fecha_hora}`)).length, 2)
   assert.ok(changed.length > selectedKeys.size)
   assert.equal(selectedKeys.size, 2)
+})
+
+test("la selección automática sigue los filtros y la manual conserva sus claves", () => {
+  const rows = [row(1), row(2), row(3)]
+  const firstView = applyFilters(rows, { ...emptyFilters, maxTemp: "2" })
+  const automatic = resolveSelection(firstView, new Set(), "automatic")
+  assert.equal(automatic.size, 2)
+
+  const nextView = applyFilters(rows, { ...emptyFilters, minTemp: "2" })
+  const manual = resolveSelection(nextView, new Set([`${rows[0].ciudad}|${rows[0].fecha_hora}`]), "manual")
+  assert.deepEqual([...manual], [`${rows[0].ciudad}|${rows[0].fecha_hora}`])
 })
 
 test("la instantánea conserva exactamente la vista previa ordenada seleccionada", () => {
