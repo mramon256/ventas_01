@@ -32,9 +32,10 @@ export function AplicacionEtl({
   embedded?: boolean
   activePanel?: DashboardPanel
 }) {
-  const [cities, setCities] = useState<City[]>(["Barcelona"])
+  const [cities, setCities] = useState<City[]>(CITIES.map(({ name }) => name))
   const [startDate, setStartDate] = useState("2026-09-01")
   const [endDate, setEndDate] = useState("2026-09-30")
+  const [selectedPeriod, setSelectedPeriod] = useState("Mes anterior")
   const [raw, setRaw] = useState(initialRaw)
   const [candidates, setCandidates] = useState<NormalizedCandidate[]>([])
   const [validRows, setValidRows] = useState<WeatherRecord[]>([])
@@ -215,16 +216,118 @@ export function AplicacionEtl({
   const changeFilter = (key: keyof Filters, value: string | boolean | City[] | Filters["sortBy"] | Filters["direction"]) => { setFilters((current) => ({ ...current, [key]: value } as Filters)); setPage(0); setSelectionDuration(null) }
   const tabs: Array<[Tab, string, number]> = [["raw", "JSON original", Object.keys(raw).filter((city) => raw[city as City].payload).length], ["transformados", "Transformados", candidates.length], ["validos", "Válidos", validRows.length], ["rechazados", "Rechazados", rejected.length], ["preview", "Vista previa de carga", previewRows.length], ["destino", "Datos en Supabase", dbTotal]]
 
-  return <main className={embedded ? "min-h-full bg-transparent px-3 py-4 sm:px-4" : "min-h-screen bg-muted/30 px-4 py-6 sm:px-8 lg:px-12"}>
+  function choosePeriod(period: "Última semana" | "2 semanas" | "Último mes" | "Mes anterior") {
+    const today = new Date()
+    const end = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()))
+    const start = new Date(end)
+
+    if (period === "Última semana") start.setUTCDate(start.getUTCDate() - 6)
+    if (period === "2 semanas") start.setUTCDate(start.getUTCDate() - 13)
+    if (period === "Último mes") start.setUTCDate(start.getUTCDate() - 29)
+    if (period === "Mes anterior") {
+      start.setUTCDate(1)
+      start.setUTCMonth(start.getUTCMonth() - 1)
+      end.setUTCDate(0)
+    }
+
+    setStartDate(start.toISOString().slice(0, 10))
+    setEndDate(end.toISOString().slice(0, 10))
+    setSelectedPeriod(period)
+  }
+
+  const PageContainer = embedded ? "div" : "main"
+  const dateCount = Math.max(
+    0,
+    Math.floor((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1,
+  )
+
+  return <PageContainer className={embedded ? "etl-etl-content min-h-full bg-transparent px-3 py-4 sm:px-4" : "min-h-screen bg-muted/30 px-4 py-6 sm:px-8 lg:px-12"}>
     <div className={`mx-auto space-y-5 ${embedded ? "max-w-none" : "max-w-[1440px] space-y-7"}`}>
       {!embedded && <header className="flex flex-col justify-between gap-4 border-b pb-6 sm:flex-row sm:items-end"><div><p className="text-xs font-semibold uppercase tracking-[.22em] text-primary">Práctica de Big Data · ETL 01</p><h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Pipeline meteorológico</h1><p className="mt-2 max-w-3xl text-sm text-muted-foreground">Extrae, transforma, limpia y selecciona datos horarios de Open-Meteo antes de cargarlos y verificarlos en Supabase.</p></div><div className="rounded-xl border bg-card px-4 py-3 text-xs text-muted-foreground"><span className="font-semibold text-foreground">Fuente</span> · Archivo histórico Open-Meteo<br/><span className="font-semibold text-foreground">Zona horaria</span> · UTC</div></header>}
 
-      {(!embedded || activePanel === "extraction") && <section aria-labelledby="config-heading" className="rounded-2xl border bg-card p-5 shadow-sm sm:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id="config-heading" className="text-lg font-semibold">Opciones de la descarga</h2><p className="mt-1 text-sm text-muted-foreground">Hasta 31 días por extracción. El volumen previsto es de 24 registros por ciudad y día.</p></div><span className="rounded-full bg-muted px-3 py-1 text-xs">{cities.length * Math.max(0, Math.floor((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1) * 24 || 0} filas previstas</span></div>
-        <div className="mt-5 grid gap-5 lg:grid-cols-[1.5fr_1fr_1fr_auto] lg:items-end"><fieldset><legend className="mb-2 text-sm font-medium">Ciudades</legend><div className="flex flex-wrap gap-2">{CITIES.map(({ name }) => <label key={name} className={`cursor-pointer rounded-lg border px-3 py-2 text-sm ${cities.includes(name) ? "border-primary bg-primary/5" : "bg-background"}`}><input className="mr-2 accent-primary" type="checkbox" checked={cities.includes(name)} onChange={() => setCities((current) => current.includes(name) ? current.filter((city) => city !== name) : [...current, name])}/>{name}</label>)}</div></fieldset><label className="grid gap-2 text-sm">Fecha inicial<input className="h-10 rounded-lg border bg-background px-3" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)}/></label><label className="grid gap-2 text-sm">Fecha final<input className="h-10 rounded-lg border bg-background px-3" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)}/></label><Button disabled={extracting || !cities.length} onClick={() => void extract()}>{extracting ? "Extrayendo…" : "Extraer datos"}</Button></div>
+      {(!embedded || activePanel === "extraction") && <>
+        <section className="etl-next-step" aria-label="Siguiente paso">
+          <div className="etl-next-step__content">
+            <p>Siguiente paso</p>
+            <ol aria-label="Progreso">
+              <li className="is-current"><span>1</span>Descargar</li>
+              <li><span>2</span>Guardar</li>
+              <li><span>3</span>Listo</li>
+            </ol>
+          </div>
+          <Button disabled={extracting || !cities.length} onClick={() => void extract()}>
+            {extracting ? "Descargando…" : "Descargar los datos"}
+          </Button>
+        </section>
+
+        <section aria-labelledby="config-heading" className="etl-extraction-setup rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+          <div className="etl-extraction-heading">
+            <span className="etl-step-number">1</span>
+            <div>
+              <h2 id="config-heading" className="text-lg font-semibold">Paso 1: Opciones de la descarga</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Opcional: ya vienen elegidas.</p>
+            </div>
+          </div>
+          <fieldset className="etl-city-picker">
+            <legend>Ciudades</legend>
+            <div className="etl-city-picker__heading">
+              <span>¿De qué ciudades?</span>
+              <div>
+                <button type="button" onClick={() => setCities(CITIES.map(({ name }) => name))}>Marcar todas</button>
+                <button type="button" onClick={() => setCities([])}>Quitar todas</button>
+              </div>
+            </div>
+            <div className="etl-city-picker__choices">
+              {CITIES.map(({ name }) => (
+                <button
+                  key={name}
+                  type="button"
+                  aria-pressed={cities.includes(name)}
+                  onClick={() => setCities((current) => current.includes(name) ? current.filter((city) => city !== name) : [...current, name])}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="etl-period-picker">
+            <legend>¿Qué periodo?</legend>
+            <div className="etl-period-picker__presets">
+              {(["Última semana", "2 semanas", "Último mes", "Mes anterior"] as const).map((period) => (
+                <button
+                  key={period}
+                  type="button"
+                  aria-pressed={selectedPeriod === period}
+                  onClick={() => choosePeriod(period)}
+                >
+                  {period}
+                </button>
+              ))}
+            </div>
+            <div className="etl-date-range">
+              <label>Desde<input aria-label="Fecha inicial" className="h-10 rounded-lg border bg-background px-3" type="date" value={startDate} onChange={(event) => { setStartDate(event.target.value); setSelectedPeriod("") }}/></label>
+              <span aria-hidden="true">→</span>
+              <label>Hasta<input aria-label="Fecha final" className="h-10 rounded-lg border bg-background px-3" type="date" value={endDate} onChange={(event) => { setEndDate(event.target.value); setSelectedPeriod("") }}/></label>
+              <span className="etl-date-range__days">{dateCount} días</span>
+            </div>
+          </fieldset>
+          <div className="etl-row-estimate">
+            <span>¿Cuántos datos son?</span>
+            <p>
+              <strong>{cities.length}</strong> ciudades <b>×</b> <strong>{dateCount}</strong> días <b>×</b>{" "}
+              <strong>24</strong> horas <b>=</b>{" "}
+              <strong>{cities.length * dateCount * 24}</strong> filas (una por ciudad y hora)
+            </p>
+            <small>{dateCount} de 31 días como máximo · se hace {cities.length} peticiones a Open-Meteo (una por ciudad)</small>
+          </div>
+          <Button className="etl-extract-button" disabled={extracting || !cities.length} onClick={() => void extract()}>
+            {extracting ? "Descargando…" : "Descargar los datos con estas opciones"}
+          </Button>
         {message && <p role="status" className="mt-4 rounded-lg border bg-muted px-4 py-3 text-sm">{message}</p>}{shapeErrors.map((error) => <p key={error} role="alert" className="mt-2 text-sm text-destructive">{error}</p>)}
         {processedCities.length > 0 && <div className="mt-4 flex flex-wrap gap-4 text-sm"><p><strong>Procesadas:</strong> {processedCities.map(({ name }) => `${name}${raw[name].status === "error" ? " (error)" : ""}`).join(", ") || "ninguna"}</p><p><strong>En curso:</strong> {CITIES.filter(({ name }) => raw[name].status === "en curso").map(({ name }) => name).join(", ") || "ninguna"}</p><p><strong>Pendientes:</strong> {pendingCities.map(({ name }) => name).join(", ") || "ninguna"}</p></div>}
         {CITIES.some(({ name }) => raw[name].status === "error") && <div className="mt-3 space-y-2">{CITIES.filter(({ name }) => raw[name].status === "error").map(({ name }) => <div key={name} className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 p-3 text-sm"><span><strong>{name}:</strong> {raw[name].error}</span><Button variant="outline" size="sm" disabled={extracting} onClick={() => void extract([name], true)}>Reintentar {name}</Button></div>)}</div>}
-      </section>}
+        </section>
+      </>}
 
       {(!embedded || activePanel === "pipeline") && <section aria-labelledby="pipeline-heading"><div className="mb-3 flex items-center justify-between gap-3"><div><h2 id="pipeline-heading" className="text-lg font-semibold">Estado del pipeline</h2><p className="text-sm text-muted-foreground">Los estados y duraciones se calculan con cada operación real.</p></div></div><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">{[
         ["Extracción", extractionStatus, `${totalExtracted} registros de entrada`, `${processedCities.length} ciudades terminadas`, extractDuration],
@@ -257,7 +360,7 @@ export function AplicacionEtl({
       </section>}
       {!embedded && <footer className="rounded-xl border bg-card p-4 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">Uso local de desarrollo:</strong> esta práctica no tiene autenticación. Protege las rutas de carga y lectura con autenticación y autorización antes de publicar la aplicación. La clave secreta solo se consulta en el servidor; RLS sigue activo y la migración no añade políticas públicas.</footer>}
     </div>
-  </main>
+  </PageContainer>
 }
 
 function Pagination({ page, pages, onChange, total }: { page: number; pages: number; onChange: (page: number) => void; total: number }) {

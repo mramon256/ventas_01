@@ -20,7 +20,7 @@ type AgentApiResponse = {
   error?: unknown
 }
 
-export function AgentDialog() {
+export function AgentDialog({ compact = false }: { compact?: boolean }) {
   const promptId = useId()
   const [open, setOpen] = useState(false)
   const [prompt, setPrompt] = useState("")
@@ -78,9 +78,15 @@ export function AgentDialog() {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
-          <Button type="button" variant="outline" className="gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className={compact ? "etl-agent-trigger" : "gap-2"}
+            aria-label={compact ? "Activar agente" : undefined}
+            title={compact ? "Activar agente" : undefined}
+          >
             <RiRobot2Line aria-hidden="true" />
-            Activar agente
+            {!compact && "Activar agente"}
           </Button>
         }
       />

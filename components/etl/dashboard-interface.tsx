@@ -1,18 +1,23 @@
 "use client"
 
 import {
+  RiArrowRightSLine,
+  RiCloseLine,
   RiDatabase2Line,
   RiDownloadCloud2Line,
   RiFilter3Line,
   RiMoonLine,
-  RiExpandRightLine,
+  RiRefreshLine,
+  RiSidebarFoldLine,
+  RiSidebarUnfoldLine,
+  RiShuffleLine,
   RiSparkling2Line,
   RiSunLine,
-  RiShuffleLine,
+  RiSunCloudyLine,
 } from "@remixicon/react"
 import Link from "next/link"
 import { useTheme } from "next-themes"
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { AgentDialog } from "@/components/etl/agent-dialog"
 import { AplicacionEtl } from "@/components/etl/aplicacion-etl"
@@ -37,29 +42,96 @@ const panelTabs: Array<{ id: DashboardPanel; label: string; icon: typeof RiDownl
   { id: "data", label: "Datos", icon: RiDatabase2Line },
 ]
 
+type ConnectionStatus = "checking" | "connected" | "unavailable" | "unconfigured"
+
+async function requestSupabaseStatus() {
+  const query = new URLSearchParams({
+    page: "0",
+    pageSize: "1",
+    sort: "fecha_hora",
+    direction: "desc",
+  })
+  const response = await fetch(`/api/meteorologia/datos?${query}`, { cache: "no-store" })
+  const result = (await response.json()) as { error?: unknown }
+  if (!response.ok) {
+    throw new Error(
+      typeof result.error === "string"
+        ? result.error
+        : `Supabase respondió con el estado ${response.status}.`,
+    )
+  }
+}
+
 export function DashboardInterface({
   supabaseConfigured,
 }: {
   supabaseConfigured: boolean
 }) {
   const [panel, setPanel] = useState<DashboardPanel>("extraction")
-  const [activeStage, setActiveStage] = useState<number | null>(0)
+  const [activeStage, setActiveStage] = useState<number | null>(null)
   const [selectedCity, setSelectedCity] = useState<City>("Madrid")
-  const [panelOpen, setPanelOpen] = useState(true)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
+    supabaseConfigured ? "checking" : "unconfigured",
+  )
+  const [connectionError, setConnectionError] = useState("")
   const { resolvedTheme, setTheme } = useTheme()
   const selectCity = useCallback((city: City) => setSelectedCity(city), [])
 
+  const checkSupabase = useCallback(async () => {
+    if (!supabaseConfigured) {
+      setConnectionStatus("unconfigured")
+      setConnectionError("")
+      return
+    }
+
+    setConnectionStatus("checking")
+    setConnectionError("")
+
+    try {
+      await requestSupabaseStatus()
+      setConnectionStatus("connected")
+    } catch (error) {
+      setConnectionStatus("unavailable")
+      setConnectionError(error instanceof Error ? error.message : "Error de conexión con Supabase.")
+    }
+  }, [supabaseConfigured])
+
+  useEffect(() => {
+    if (!supabaseConfigured) return
+    let active = true
+
+    void requestSupabaseStatus().then(
+      () => {
+        if (active) setConnectionStatus("connected")
+      },
+      (error: unknown) => {
+        if (!active) return
+        setConnectionStatus("unavailable")
+        setConnectionError(error instanceof Error ? error.message : "Error de conexión con Supabase.")
+      },
+    )
+
+    return () => {
+      active = false
+    }
+  }, [supabaseConfigured])
+
+  const connectionLabel = {
+    checking: "Comprobando…",
+    connected: "Conectado",
+    unavailable: "Tabla no disponible",
+    unconfigured: "Sin configurar",
+  }[connectionStatus]
+
   return (
-    <main className="etl-dashboard">
+    <div className="etl-dashboard">
       <header className="etl-topbar">
-        <Link href="/" className="etl-brand" aria-label="Meteo ETL, inicio">
-          <span className="etl-brand__icon" aria-hidden="true">
-            <RiSparkling2Line />
-          </span>
-          <span>Meteo ETL</span>
+        <Link href="/" className="etl-brand" aria-label="Meteo ETL, inicio" title="Meteo ETL">
+          <RiSunCloudyLine aria-hidden="true" />
         </Link>
 
-        <nav className="etl-stage-nav" aria-label="Etapas del pipeline">
+        <nav className="etl-stage-nav" aria-label="Fases del pipeline">
           {stages.map((stage, index) => {
             const Icon = stage.icon
             const active = activeStage === index
@@ -71,16 +143,18 @@ export function DashboardInterface({
                   onClick={() => {
                     setActiveStage(index)
                     setPanel(stage.id)
+                    setPanelOpen(true)
                   }}
+                  aria-label={`${stage.label} (${stage.detail}): Pendiente, —`}
                   aria-current={active ? "step" : undefined}
+                  title={`${index + 1}. ${stage.label} · ${stage.detail}`}
                 >
                   <Icon aria-hidden="true" />
-                  <span>
-                    <strong>{index + 1}. {stage.label}</strong>
-                    <small>{stage.detail}</small>
-                  </span>
+                  <span className="etl-stage-status" aria-hidden="true" />
                 </button>
-                {index < stages.length - 1 && <span className="etl-stage-arrow" aria-hidden="true">›</span>}
+                {index < stages.length - 1 && (
+                  <RiArrowRightSLine className="etl-stage-arrow" aria-hidden="true" />
+                )}
               </div>
             )
           })}
@@ -88,83 +162,102 @@ export function DashboardInterface({
 
         <div className="etl-topbar__actions">
           <span
-            className={supabaseConfigured ? "etl-supabase is-ready" : "etl-supabase"}
+            className={`etl-supabase is-${connectionStatus}`}
             role="status"
+            aria-label={
+              connectionError
+                ? `Error de Supabase: ${connectionError}`
+                : `Estado de Supabase: ${connectionLabel}`
+            }
+            title={connectionError || undefined}
           >
+            <span className="etl-supabase__dot" aria-hidden="true" />
             <RiDatabase2Line aria-hidden="true" />
-            {supabaseConfigured ? "Supabase · Configurado" : "Supabase · Sin configurar"}
+            <span>Supabase · {connectionLabel}</span>
           </span>
-          <AgentDialog />
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon"
-            aria-label="Cambiar tema"
-            title="Cambiar tema"
-            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+            className="etl-icon-button etl-refresh-button"
+            aria-label="Comprobar conexión con Supabase"
+            title="Comprobar conexión con Supabase"
+            onClick={() => void checkSupabase()}
+            disabled={connectionStatus === "checking"}
           >
-            {resolvedTheme === "dark" ? <RiSunLine aria-hidden="true" /> : <RiMoonLine aria-hidden="true" />}
+            <RiRefreshLine aria-hidden="true" />
           </Button>
           <Button
             type="button"
             variant="outline"
             size="icon"
-            aria-label={panelOpen ? "Ocultar panel" : "Mostrar panel"}
-            title={panelOpen ? "Ocultar panel" : "Mostrar panel"}
+            className="etl-icon-button"
+            aria-label="Cambiar entre tema claro y oscuro"
+            title="Cambiar tema"
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+          >
+            <RiSunLine className="dark:hidden" aria-hidden="true" />
+            <RiMoonLine className="hidden dark:inline" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="etl-icon-button"
+            aria-label={panelOpen ? "Cerrar panel" : "Abrir panel"}
+            title={panelOpen ? "Cerrar panel" : "Abrir panel"}
             aria-expanded={panelOpen}
             onClick={() => setPanelOpen((open) => !open)}
           >
-            <RiExpandRightLine aria-hidden="true" />
+            {panelOpen ? <RiSidebarFoldLine aria-hidden="true" /> : <RiSidebarUnfoldLine aria-hidden="true" />}
           </Button>
         </div>
       </header>
 
-      <div className={panelOpen ? "etl-workspace" : "etl-workspace is-map-only"}>
-        <div className="etl-map-column">
-          <EstacionesMap city={selectedCity} onCityChange={selectCity} />
-          <div className="etl-map-station">
-            <span className="etl-map-station__dot" />
-            <span><small>ESTACIÓN SELECCIONADA</small><strong>{selectedCity}</strong></span>
-          </div>
-        </div>
+      <main className="etl-workspace">
+        <EstacionesMap city={selectedCity} onCityChange={selectCity} />
 
-        {panelOpen ? (
-          <aside className="etl-side-panel" aria-label="Panel ETL">
-            <nav className="etl-panel-tabs" aria-label="Vistas del pipeline">
-              {panelTabs.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={panel === id ? "etl-panel-tab is-active" : "etl-panel-tab"}
-                  aria-current={panel === id ? "page" : undefined}
-                  onClick={() => {
-                    setPanel(id)
-                    setActiveStage(
-                      id === "extraction" ? 0 : id === "pipeline" ? 1 : id === "data" ? 3 : null,
-                    )
-                  }}
-                >
-                  <Icon aria-hidden="true" />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </nav>
+        {panelOpen && (
+          <aside className="etl-side-panel" aria-label="Panel de trabajo">
+            <div className="etl-panel-header">
+              <nav className="etl-panel-tabs" aria-label="Vistas del panel">
+                {panelTabs.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={panel === id ? "etl-panel-tab is-active" : "etl-panel-tab"}
+                    aria-current={panel === id ? "page" : undefined}
+                    onClick={() => {
+                      setPanel(id)
+                      setActiveStage(
+                        id === "extraction" ? 0 : id === "pipeline" ? 1 : id === "data" ? 3 : null,
+                      )
+                    }}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </nav>
+              <AgentDialog compact />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="etl-panel-close"
+                aria-label="Cerrar panel"
+                title="Cerrar panel"
+                onClick={() => setPanelOpen(false)}
+              >
+                <RiCloseLine aria-hidden="true" />
+              </Button>
+            </div>
             <div className="etl-side-panel__scroll">
               <AplicacionEtl embedded activePanel={panel} />
             </div>
           </aside>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            className="etl-reopen-panel"
-            onClick={() => setPanelOpen(true)}
-          >
-            <RiExpandRightLine aria-hidden="true" />
-            Mostrar panel
-          </Button>
         )}
-      </div>
-    </main>
+      </main>
+    </div>
   )
 }
