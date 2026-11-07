@@ -13,6 +13,7 @@ const fontMono = Geist_Mono({
   variable: "--font-mono",
 })
 
+// Fuentes del filtro "Vintage": sin precarga, solo se descargan si se activa.
 const fontVintage = EB_Garamond({
   subsets: ["latin"],
   variable: "--font-vintage",
@@ -46,7 +47,7 @@ export default function RootLayout({
         "font-sans",
         inter.variable,
         fontVintage.variable,
-        fontVintageTitulo.variable,
+        fontVintageTitulo.variable
       )}
     >
       <head>
